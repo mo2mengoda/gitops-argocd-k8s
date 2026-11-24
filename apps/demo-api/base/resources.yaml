@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-api
+spec:
+  selector:
+    app.kubernetes.io/name: demo-api
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-api-config
+data:
+  LOG_LEVEL: info
+  ERROR_RATE: "0.01"
+  LATENCY_MS: "80"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-api.example.local   # patched per environment
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: demo-api, port: { name: http } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: demo-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # avoid flapping
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-api
+spec:
+  minAvailable: 1   # node drains / upgrades always keep at least one pod serving
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-api

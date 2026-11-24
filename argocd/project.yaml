@@ -1,0 +1,29 @@
+# AppProject: limits what the platform apps are allowed to deploy and where.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Apps managed through GitOps from this repository
+  sourceRepos:
+    - https://github.com/mo2mengoda/gitops-argocd-k8s.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: demo-*
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota       # quotas are owned by the platform team, not by apps
+  # Production changes are only applied inside the weekday working window,
+  # manual syncs are still allowed for emergencies (rollback / hotfix).
+  syncWindows:
+    - kind: allow
+      schedule: "0 8 * * 0-4"   # Sun-Thu 08:00 (Egypt working week)
+      duration: 10h
+      applications: ["*-prod"]
+      manualSync: true

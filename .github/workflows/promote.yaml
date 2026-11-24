@@ -1,0 +1,39 @@
+# Promote: copy the image tag running in staging to prod, through a pull request.
+# The PR is the approval gate; merging it is what deploys to production.
+name: promote-to-prod
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: imranismail/setup-kustomize@v2
+
+      - name: Read staging tag
+        id: tag
+        run: |
+          TAG=$(grep -A2 "name: ghcr.io" apps/demo-api/overlays/staging/kustomization.yaml | awk '/newTag/ {print $2}')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set prod tag
+        run: |
+          cd apps/demo-api/overlays/prod
+          kustomize edit set image ghcr.io/${{ github.repository_owner }}/demo-api:${{ steps.tag.outputs.tag }}
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          branch: promote/${{ steps.tag.outputs.tag }}
+          title: "prod: promote demo-api ${{ steps.tag.outputs.tag }}"
+          body: |
+            Promotes the image already verified in **staging** to **prod**.
+            - [ ] Staging healthy in Argo CD
+            - [ ] No firing SLO alerts in staging
+            - [ ] Inside the prod sync window (Sun-Thu)
+          commit-message: "prod: demo-api -> ${{ steps.tag.outputs.tag }}"

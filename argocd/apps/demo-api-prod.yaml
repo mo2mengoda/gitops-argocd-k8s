@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-api-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # notify on-call channel about prod syncs (argocd-notifications)
+    notifications.argoproj.io/subscribe.on-sync-succeeded.teams: sre-oncall
+    notifications.argoproj.io/subscribe.on-health-degraded.teams: sre-oncall
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/mo2mengoda/gitops-argocd-k8s.git
+    targetRevision: main
+    path: apps/demo-api/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }
+  # keep the HPA in control of replicas without Argo CD fighting it
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
